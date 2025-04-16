@@ -1,0 +1,86 @@
+# Função para ler as credenciais de um arquivo .txt
+function Get-CredentialsFromFile {
+    param (
+        [string]$FilePath
+    )
+
+    if (Test-Path $FilePath) {
+        $lines = Get-Content -Path $FilePath
+        $credentials = @{}
+        foreach ($line in $lines) {
+            $key, $value = $line -split "="
+            $credentials[$key.Trim()] = $value.Trim()
+        }
+        return New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $credentials["username"], (ConvertTo-SecureString $credentials["password"] -AsPlainText -Force)
+    } else {
+        throw "Arquivo de credenciais não encontrado em $FilePath."
+    }
+}
+
+# Configurações
+$credentialsFilePath = "C:\Users\clari\OneDrive\Área de Trabalho\username=x18110313@ca.mg.gov.br.txt"
+$siteUrl = "https://cecad365.sharepoint.com/sites/LAB.mg"
+$listName = "teste_automatiza_robo_de_log_1"    
+
+try {
+    # Obter credenciais
+    $credentials = Get-CredentialsFromFile -FilePath $credentialsFilePath
+
+    # Conectar ao SharePoint utilizando o método atualizado
+    Connect-PnPOnline -Url $siteUrl -Credentials $credentials -ErrorAction Stop
+    Write-Host "Conexão estabelecida com sucesso!" -ForegroundColor Green
+} catch {
+    Write-Host "ERRO ao estabelecer conexão: $($_.Exception.Message)" -ForegroundColor Red
+    return
+}
+
+# Função para gerar log na lista do SharePoint
+function GerarLog {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$NomeAutomacao,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Usuario,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Diária", "Semanal", "Mensal", "Eventual")]
+        [string]$FrequenciaEsperada
+    )
+
+    try {
+        # Timestamp
+        $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+        # Verificar existência da lista
+        $list = Get-PnPList -Identity $listName -ErrorAction SilentlyContinue
+        if (-not $list) {
+            throw "Lista '$listName' não encontrada."
+        }
+
+        # Preencher campos da lista
+        $itemValues = @{
+            "Title"              = $NomeAutomacao
+            "Usuario"            = $Usuario
+            "DataHora"           = $Timestamp
+        }
+
+        # Inserir item na lista
+        Write-Host "Registrando log: [$NomeAutomacao] - $Timestamp" -ForegroundColor Yellow
+        $newItem = Add-PnPListItem -List $listName -Values $itemValues -ErrorAction Stop
+
+        Write-Host "Log registrado com sucesso! ID do item: $($newItem.Id)" -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host "ERRO ao registrar log: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    } finally {
+        # Verificar conexão antes de desconectar
+        if (Get-PnPConnection -ErrorAction SilentlyContinue) {
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# Executar a função de log
+GerarLog -NomeAutomacao "MinhaAutomacaoX" -Usuario "x18110313" - DataHora (Get-Date -Format "yyyy-MM-dd HH:mm:ss") 
