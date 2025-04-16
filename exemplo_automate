@@ -1,0 +1,74 @@
+Excel.LaunchExcel.LaunchAndOpenUnderExistingProcess Path: $'''C:\\Users\\clari\\OneDrive\\Área de Trabalho\\parouimpar.xlsx''' Visible: True ReadOnly: False Instance=> arquivo_do_excel
+Excel.GetFirstFreeColumnRow Instance: arquivo_do_excel FirstFreeColumn=> primeira_coluna_livre FirstFreeRow=> primeira_linha_livre
+Excel.ReadFromExcel.ReadCells Instance: arquivo_do_excel StartColumn: $'''A''' StartRow: 1 EndColumn: primeira_coluna_livre - 1 EndRow: primeira_linha_livre - 1 ReadAsText: False FirstLineIsHeader: True RangeValue=> Tabela
+Excel.GetFirstFreeRowOnColumn Instance: arquivo_do_excel Column: primeira_coluna_livre - 1 FirstFreeRowOnColumn=> primeira_linha_livre_emB
+LOOP FOREACH linha IN Tabela
+    IF (linha['numero'] mod 2) = 0 THEN
+        Excel.WriteToExcel.WriteCell Instance: arquivo_do_excel Value: Par Column: $'''B''' Row: primeira_linha_livre_emB
+    ELSE
+        Excel.WriteToExcel.WriteCell Instance: arquivo_do_excel Value: Impar Column: $'''B''' Row: primeira_linha_livre_emB
+    END
+    Variables.IncreaseVariable Value: primeira_linha_livre_emB IncrementValue: 1
+END
+Scripting.RunPowershellScript.RunPowershellScript Script: $'''# Verificar e instalar módulo se necessário
+if (-not (Get-Module -Name \"PnP.PowerShell\" -ListAvailable)) {
+    Install-Module -Name \"PnP.PowerShell\" -Force -Scope CurrentUser -AllowClobber
+    Import-Module PnP.PowerShell
+}
+
+function GerarLog {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$NomeAutomacao,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Usuario,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(\"Diária\", \"Semanal\", \"Mensal\", \"Eventual\")]
+        [string]$FrequenciaEsperada
+    )
+
+    # Configurações
+    $siteUrl = \"https://cecad365.sharepoint.com/sites/LAB.mg\"
+    $listName = \"teste_automatiza_robo_de_log_1\"
+
+    try {
+        # Timestamp
+        $Timestamp = Get-Date -Format \"yyyy-MM-dd HH:mm:ss\"
+
+        # Autenticação interativa (via navegador com MFA)
+        Connect-PnPOnline -Url $siteUrl -DeviceLogin -ErrorAction Stop
+
+        # Verificar lista
+        $list = Get-PnPList -Identity $listName -ErrorAction SilentlyContinue
+        if (-not $list) {
+            throw \"Lista \'$listName\' não encontrada.\"
+        }
+
+        # Preencher campos
+        $itemValues = @{
+            \"Title\"              = $NomeAutomacao
+            \"Usuario\"            = $Usuario
+            \"DataHora\"           = $Timestamp
+            \"FrequenciaEsperada\" = $FrequenciaEsperada
+        }
+
+        # Inserir item
+        Write-Host \"Registrando log: [$NomeAutomacao] - $Timestamp\" -ForegroundColor Yellow
+        $newItem = Add-PnPListItem -List $listName -Values $itemValues -ErrorAction Stop
+
+        Write-Host \"Log registrado com sucesso! ID do item: $($newItem.Id)\" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host \"ERRO ao registrar log: $($_.Exception.Message)\" -ForegroundColor Red
+        return $false
+    }
+    finally {
+        Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    }
+}
+
+# EXECUTAR A FUNÇÃO
+GerarLog -NomeAutomacao \"MinhaAutomacaoX\" -Usuario \"x18110313\" -FrequenciaEsperada \"Diária\"''' ScriptOutput=> PowershellOutput
